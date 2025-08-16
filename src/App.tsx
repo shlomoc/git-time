@@ -24,7 +24,7 @@ export default function App() {
     setState({ loading: true, error: null, result: null });
 
     try {
-      const response = await fetch('https://8bf2dd31-d77a-4954-9246-097e332c5db2-00-3t267q87glb2q.worf.replit.dev:5000/analyze', {
+      const response = await fetch('http://localhost:5001/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

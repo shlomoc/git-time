@@ -4,6 +4,7 @@ import logging
 from typing import List, Dict, Any
 import openai
 from openai import AsyncOpenAI
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
@@ -11,6 +12,11 @@ class GPTSummarizer:
     """Handles GPT-based commit summarization"""
     
     def __init__(self):
+        # Load environment variables from .env.local file
+        import os.path
+        env_path = os.path.join(os.path.dirname(__file__), '..', '.env.local')
+        load_dotenv(env_path)
+        
         api_key = os.environ.get('OPENAI_API_KEY')
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is required")

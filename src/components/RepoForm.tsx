@@ -6,7 +6,7 @@ interface RepoFormProps {
 }
 
 const DEMO_REPOS = [
-  'https://github.com/supabase/supabase',
+  'https://github.com/fastapi/fastapi',
   'https://github.com/nextauthjs/next-auth', 
   'https://github.com/strapi/strapi'
 ];
