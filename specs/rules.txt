@@ -92,23 +92,8 @@ Follow these rules to move fast **without creating chaos**:
 [fix] Handle missing repo URL
 [ui] Add loading state to timeline
 
-yaml
-Copy
-Edit
-- Pair on hard problems. Solo on polish.
 
 ---
-
-## 📦 LLM Usage Guidelines
-
-- Use consistent `prompt.md`
-- GPT temp = 0.3 for reliability
-- Chunk commits into logical topic blocks
-- Strip large diffs — only send what matters
-- Keep max token request under 2000 total
-
----
-
 ## 🧠 Hackathon Best Practices
 
 | Rule | Why |

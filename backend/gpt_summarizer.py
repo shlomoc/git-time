@@ -23,7 +23,7 @@ class GPTSummarizer:
         
         self.client = AsyncOpenAI(api_key=api_key)
         self.temperature = 0.3
-        self.max_tokens = 1000
+        self.max_completion_tokens = 1000
     
     async def summarize_commits(self, commits: List[Dict[str, Any]], topic: str) -> str:
         """Generate GPT summary of commits for a specific topic"""
@@ -35,13 +35,12 @@ class GPTSummarizer:
             
             # Call GPT API
             response = await self.client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-5",
                 messages=[
                     {"role": "system", "content": self._get_system_prompt()},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens
+                max_completion_tokens=self.max_completion_tokens
             )
             
             summary = response.choices[0].message.content
@@ -108,3 +107,148 @@ Use a narrative tone like a changelog for humans. Be concise but insightful."""
         summary += "\n*Note: This is a fallback summary. Full AI analysis was unavailable.*"
         
         return summary
+    
+    async def process_qa(self, question: str, commits: List[Dict[str, Any]], topic: str, visualizations: Dict[str, Any]) -> Dict[str, Any]:
+        """Process Q&A request using the qa-feature-ui.md template"""
+        try:
+            # Build Q&A prompt
+            qa_prompt = self._build_qa_prompt(question, topic, commits)
+            
+            logger.info(f"Processing Q&A question: {question}")
+            
+            # Call GPT API with Q&A system prompt
+            response = await self.client.chat.completions.create(
+                model="gpt-5",
+                messages=[
+                    {"role": "system", "content": self._get_qa_system_prompt()},
+                    {"role": "user", "content": qa_prompt}
+                ],
+                max_completion_tokens=800
+            )
+            
+            content = response.choices[0].message.content
+            
+            # Parse response into answer and evidence
+            parsed_qa = self._parse_qa_response(content, commits)
+            
+            # Add visualization data
+            parsed_qa["visualizations"] = visualizations
+            
+            logger.info("Q&A processing completed")
+            
+            return parsed_qa
+            
+        except Exception as e:
+            logger.error(f"Q&A processing failed: {e}")
+            return self._fallback_qa_response(question, commits, visualizations)
+    
+    def _get_qa_system_prompt(self) -> str:
+        """Get system prompt for Q&A processing based on qa-feature-ui.md"""
+        return """You are a concise software historian. Given git commits and diffs, you will answer the user's question about code evolution.
+
+Be evidence-based. When you infer motivation, cite the commit(s) that support it.
+If evidence is weak, say "Insufficient evidence" and offer the most likely explanation clearly marked as a hypothesis.
+
+Keep prose brief (executive summary style). Focus on the Topic if provided; otherwise answer broadly.
+
+Output format:
+Answer
+Summary: <2-4 sentences answering the question>
+
+Key Evidence
+<hash> — "<commit message or quoted fragment>"
+<hash> — "<commit message or quoted fragment>"
+
+Do not invent commit hashes or authors; only use what's provided."""
+    
+    def _build_qa_prompt(self, question: str, topic: str, commits: List[Dict[str, Any]]) -> str:
+        """Build Q&A prompt following qa-feature-ui.md format"""
+        prompt = f"Question: {question}\n"
+        
+        if topic:
+            prompt += f"Topic: {topic}\n"
+        
+        prompt += "\nCommits:\n"
+        
+        for commit in commits[:15]:  # Limit for token management
+            prompt += f"- {{\n"
+            prompt += f"  hash: \"{commit['hash']}\",\n"
+            prompt += f"  author: \"{commit['author']}\",\n"
+            prompt += f"  date: \"{commit['date'][:10]}\",\n"
+            prompt += f"  message: \"{commit['message'][:150]}\",\n"
+            prompt += f"  files_changed: {commit['files_changed'][:3]},\n"
+            prompt += f"  diff_excerpt: \"{commit['diff'][:200]}...\"\n"
+            prompt += "}\n"
+        
+        return prompt
+    
+    def _parse_qa_response(self, content: str, commits: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Parse GPT Q&A response into structured format"""
+        lines = content.strip().split('\n')
+        
+        answer = ""
+        evidence = []
+        
+        current_section = None
+        
+        for line in lines:
+            line = line.strip()
+            
+            if line.startswith("Answer") or line.startswith("Summary:"):
+                current_section = "answer"
+                if line.startswith("Summary:"):
+                    answer += line[8:].strip() + " "
+                continue
+            elif line.startswith("Key Evidence"):
+                current_section = "evidence"
+                continue
+            elif line and current_section == "answer":
+                answer += line + " "
+            elif line and current_section == "evidence" and "—" in line:
+                # Parse evidence line: "hash — description"
+                parts = line.split("—", 1)
+                if len(parts) == 2:
+                    hash_part = parts[0].strip()
+                    description = parts[1].strip().strip('"')
+                    evidence.append({
+                        "hash": hash_part,
+                        "description": description
+                    })
+        
+        return {
+            "answer": answer.strip(),
+            "evidence": evidence
+        }
+    
+    def _fallback_qa_response(self, question: str, commits: List[Dict[str, Any]], visualizations: Dict[str, Any]) -> Dict[str, Any]:
+        """Provide fallback Q&A response when GPT fails"""
+        if len(commits) < 2:
+            return {
+                "answer": "Insufficient evidence.",
+                "evidence": [],
+                "visualizations": visualizations
+            }
+        
+        # Simple pattern matching for common questions
+        question_lower = question.lower()
+        
+        if "why" in question_lower or "introduced" in question_lower:
+            answer = f"Based on {len(commits)} commits, this feature appears to have evolved through incremental changes and refactoring."
+        elif "how" in question_lower and "evolv" in question_lower:
+            answer = f"The feature evolved across {len(commits)} commits, with contributions from multiple developers over time."
+        else:
+            answer = f"Analysis of {len(commits)} commits shows the development timeline of this feature."
+        
+        # Use first few commits as evidence
+        evidence = []
+        for commit in commits[:3]:
+            evidence.append({
+                "hash": commit['hash'],
+                "description": commit['message'][:80] + "..." if len(commit['message']) > 80 else commit['message']
+            })
+        
+        return {
+            "answer": answer,
+            "evidence": evidence,
+            "visualizations": visualizations
+        }

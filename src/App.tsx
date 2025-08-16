@@ -5,26 +5,43 @@ import RepoForm from './components/RepoForm';
 import LoadingState from './components/LoadingState';
 import Timeline from './components/Timeline';
 import Summary from './components/Summary';
+import QASection from './components/QASection';
+import OwnershipChart from './components/OwnershipChart';
+import HotspotChart from './components/HotspotChart';
+import ComplexityTrend from './components/ComplexityTrend';
 import { AnalysisResult } from './types';
 
 interface AppState {
   loading: boolean;
   error: string | null;
   result: AnalysisResult | null;
+  activeTab: string;
+  repoUrl: string;
+  topic: string;
 }
 
 export default function App() {
   const [state, setState] = useState<AppState>({
     loading: false,
     error: null,
-    result: null
+    result: null,
+    activeTab: 'summary',
+    repoUrl: '',
+    topic: ''
   });
 
   const handleAnalyze = async (repoUrl: string, topic: string) => {
-    setState({ loading: true, error: null, result: null });
+    setState(prev => ({ 
+      ...prev, 
+      loading: true, 
+      error: null, 
+      result: null, 
+      repoUrl, 
+      topic 
+    }));
 
     try {
-      const response = await fetch('http://localhost:5001/analyze', {
+      const response = await fetch('http://localhost:5002/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -41,19 +58,31 @@ export default function App() {
       }
 
       const result = await response.json();
-      setState({ loading: false, error: null, result });
+      setState(prev => ({ ...prev, loading: false, error: null, result }));
 
     } catch (error) {
-      setState({
+      setState(prev => ({
+        ...prev,
         loading: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
         result: null
-      });
+      }));
     }
   };
 
   const handleReset = () => {
-    setState({ loading: false, error: null, result: null });
+    setState({ 
+      loading: false, 
+      error: null, 
+      result: null,
+      activeTab: 'summary',
+      repoUrl: '',
+      topic: ''
+    });
+  };
+
+  const handleTabChange = (tab: string) => {
+    setState(prev => ({ ...prev, activeTab: tab }));
   };
 
   return (
@@ -90,21 +119,72 @@ export default function App() {
               </button>
             </div>
             
-            <Summary 
-              summary={state.result.summary}
-              commitCount={state.result.commits.length}
-            />
-            
-            <Timeline 
-              timeline={state.result.timeline}
-              commits={state.result.commits}
-            />
+            {/* Tab Navigation */}
+            <div className="tab-navigation">
+              <button 
+                onClick={() => handleTabChange('summary')}
+                className={`tab-button ${state.activeTab === 'summary' ? 'active' : ''}`}
+              >
+                📄 Summary
+              </button>
+              <button 
+                onClick={() => handleTabChange('timeline')}
+                className={`tab-button ${state.activeTab === 'timeline' ? 'active' : ''}`}
+              >
+                ⏱️ Timeline
+              </button>
+              <button 
+                onClick={() => handleTabChange('qa')}
+                className={`tab-button ${state.activeTab === 'qa' ? 'active' : ''}`}
+              >
+                ❓ Q&A
+              </button>
+              <button 
+                onClick={() => handleTabChange('visualizations')}
+                className={`tab-button ${state.activeTab === 'visualizations' ? 'active' : ''}`}
+              >
+                📊 Insights
+              </button>
+            </div>
+
+            {/* Tab Content */}
+            <div className="tab-content">
+              {state.activeTab === 'summary' && (
+                <Summary 
+                  summary={state.result.summary}
+                  commitCount={state.result.commits.length}
+                />
+              )}
+
+              {state.activeTab === 'timeline' && (
+                <Timeline 
+                  timeline={state.result.timeline}
+                  commits={state.result.commits}
+                />
+              )}
+
+              {state.activeTab === 'qa' && (
+                <QASection 
+                  initialQA={state.result.qa_data}
+                  repoUrl={state.repoUrl}
+                  topic={state.topic}
+                />
+              )}
+
+              {state.activeTab === 'visualizations' && state.result.visualizations && (
+                <div className="visualizations-tab">
+                  <OwnershipChart data={state.result.visualizations.ownership} />
+                  <HotspotChart data={state.result.visualizations.hotspots} />
+                  <ComplexityTrend data={state.result.visualizations.complexity_trend} />
+                </div>
+              )}
+            </div>
           </div>
         )}
       </main>
 
       <footer className="app-footer">
-        <p>Built for hackathon demo • Powered by GPT-4 & GitPython</p>
+        <p>Built for hackathon demo • Powered by GPT-5 & GitPython</p>
       </footer>
     </div>
   );

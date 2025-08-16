@@ -4,14 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a "Codebase Time Machine" - a full-stack application that analyzes GitHub repositories to show how specific features (like authentication, APIs, etc.) evolved over time. It uses GPT-4 to generate intelligent summaries of commit histories.
+This is a "Codebase Time Machine" - a full-stack application that analyzes GitHub repositories to show how specific features (like authentication, APIs, etc.) evolved over time. It uses GPT-5 to generate intelligent summaries of commit histories.
 
 **Architecture:**
-- **Frontend**: React + TypeScript with Vite bundler
-- **Backend**: FastAPI (Python) with async endpoints
-- **Key Libraries**: GitPython for repository analysis, OpenAI API for summaries
+- **Frontend**: React + TypeScript with Vite bundler + Chart.js for visualizations
+- **Backend**: FastAPI (Python) with async endpoints and Q&A processing
+- **Key Libraries**: GitPython for repository analysis, OpenAI GPT-5 API for summaries and Q&A
+- **Visualization**: Chart.js for ownership charts, hotspots, and complexity trends
 - **Deployment**: Originally built for Replit hosting
-| Visualization | Chart.js, react-flow, visx |
 
 ## Common Development Commands
 
@@ -25,46 +25,65 @@ npm run preview      # Preview production build
 ### Backend Development
 ```bash
 # From backend/ directory
-python -m pip install -r requirements.txt  # Install dependencies
-python main.py                              # Start FastAPI server on port 5000
+python3 -m pip install --user --break-system-packages -r requirements.txt  # Install dependencies (includes OpenAI >=1.50.0 for GPT-5)
+python3 main.py                              # Start FastAPI server on port 5002
 ```
 
 ### Full Stack Development
-The frontend expects the backend to run on port 5000. The hardcoded backend URL in App.tsx may need updating for local development.
+The frontend expects the backend to run on port 5002. Both servers can run simultaneously:
+- Frontend: http://localhost:5173/ (Vite dev server)
+- Backend: http://localhost:5002/ (FastAPI server)
 
 ## Architecture Details
 
 ### Frontend Structure
-- `src/App.tsx` - Main application state and API integration
-- `src/components/` - Reusable UI components (RepoForm, Timeline, Summary, LoadingState)
-- `src/types.ts` - TypeScript interfaces for API responses
+- `src/App.tsx` - Main application state and API integration with tabbed interface
+- `src/components/` - Reusable UI components:
+  - `RepoForm.tsx` - Repository input form
+  - `Timeline.tsx` - Commit timeline visualization
+  - `Summary.tsx` - GPT-generated summary display
+  - `QASection.tsx` - Interactive Q&A interface
+  - `OwnershipChart.tsx` - Code ownership bar charts
+  - `HotspotChart.tsx` - File change frequency charts
+  - `ComplexityTrend.tsx` - Development complexity line charts
+  - `LoadingState.tsx` - Loading indicators
+- `src/types.ts` - TypeScript interfaces for API responses, Q&A data, and visualizations
 
 ### Backend Structure
-- `backend/main.py` - FastAPI application with CORS middleware
-- `backend/git_utils.py` - GitAnalyzer class for repository cloning and commit filtering
-- `backend/gpt_summarizer.py` - GPTSummarizer class for OpenAI API integration
+- `backend/main.py` - FastAPI application with CORS middleware and Q&A endpoints
+- `backend/git_utils.py` - GitAnalyzer class for repository cloning, commit filtering, and visualization data generation
+- `backend/gpt_summarizer.py` - GPTSummarizer class for OpenAI API integration and Q&A processing
 
 ### Key Data Flow
 1. User submits GitHub repo URL + topic (auth, api, database, ui)
 2. Backend clones repo, filters commits by topic keywords
-3. GPT-4 analyzes filtered commits to generate summary
-4. Frontend displays timeline and summary
+3. GPT-5 analyzes filtered commits to generate summary and default Q&A
+4. Backend generates visualization data (ownership, hotspots, complexity trends)
+5. Frontend displays tabbed interface with Summary, Timeline, Q&A, and Insights
+6. Users can ask additional questions via the Q&A interface
 
 ### API Endpoints
-- `POST /analyze` - Main analysis endpoint (repo_url, topic)
+- `POST /analyze` - Main analysis endpoint (repo_url, topic) - returns summary, commits, timeline, qa_data, visualizations
+- `POST /qa` - Q&A endpoint (question, repo_url, topic) - returns answer, evidence, visualizations
 - `GET /health` - Health check
 
 ### Environment Requirements
-- Backend requires OpenAI API key (likely via environment variable)
+- Backend requires OpenAI API key with GPT-5 access (via .env.local file)
 - CORS configured for cross-origin requests from frontend
 - Git must be available for repository cloning
+- OpenAI package version >=1.50.0 for GPT-5 compatibility
 
 ## Important Notes
 
-- The app has a hardcoded Replit backend URL in App.tsx that needs updating for local development
+- Backend URL is configured for localhost:5002 in App.tsx and QASection.tsx
 - Topic filtering uses predefined keywords in GitAnalyzer.TOPIC_KEYWORDS
 - Commit analysis is limited to 20 most recent matching commits
 - Temporary directories are used for git clones and cleaned up after analysis
+- Q&A responses include evidence citations with commit hashes
+- Visualization data is automatically generated during analysis
+- Chart.js components are responsive and mobile-friendly
+- GPT-5 uses `max_completion_tokens` parameter instead of `max_tokens`
+- GPT-5 only supports default temperature (no custom temperature values)
 
 # GitTime – Hackathon Implementation Guide (Replit Edition)
 
@@ -143,12 +162,16 @@ Follow these rules to move fast **without creating chaos**:
 
 ## ✅ Final Checklist
 
-- [ ] GitHub repo input works?
-- [ ] Auth evolution demo is polished?
-- [ ] Timeline renders and looks clean?
-- [ ] GPT summaries are insightful?
-- [ ] React UI has loading, error, happy states?
-- [ ] Project can be explained in 60 seconds?
+- [x] GitHub repo input works?
+- [x] Auth evolution demo is polished?
+- [x] Timeline renders and looks clean?
+- [x] GPT summaries are insightful?
+- [x] React UI has loading, error, happy states?
+- [x] Project can be explained in 60 seconds?
+- [x] Q&A interface allows natural language questions?
+- [x] Visualizations show ownership, hotspots, and trends?
+- [x] Tabbed interface provides organized navigation?
+- [x] Mobile-responsive design works on all devices?
 
 Let’s ship this fast, clean, and awesome.
 

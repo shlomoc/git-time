@@ -153,6 +153,133 @@ class GitAnalyzer:
         timeline.sort(key=lambda x: x['date'], reverse=True)
         return timeline
     
+    def generate_visualization_data(self, commits: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Generate data for Q&A visualizations"""
+        return {
+            'ownership': self._calculate_ownership(commits),
+            'hotspots': self._calculate_hotspots(commits),
+            'complexity_trend': self._calculate_complexity_trend(commits),
+            'evolution': self._extract_evolution_moments(commits)
+        }
+    
+    def _calculate_ownership(self, commits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Aggregate commit and change data by author"""
+        ownership = {}
+        
+        for commit in commits:
+            author = commit['author']
+            if author not in ownership:
+                ownership[author] = {
+                    'author': author,
+                    'commits': 0,
+                    'lines_changed': 0,
+                    'first_commit': commit['date'],
+                    'last_commit': commit['date']
+                }
+            
+            ownership[author]['commits'] += 1
+            ownership[author]['lines_changed'] += commit['stats']['insertions'] + commit['stats']['deletions']
+            
+            # Update date range
+            if commit['date'] < ownership[author]['first_commit']:
+                ownership[author]['first_commit'] = commit['date']
+            if commit['date'] > ownership[author]['last_commit']:
+                ownership[author]['last_commit'] = commit['date']
+        
+        # Sort by commits count (descending)
+        return sorted(ownership.values(), key=lambda x: x['commits'], reverse=True)
+    
+    def _calculate_hotspots(self, commits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Find files with most changes (hotspots)"""
+        hotspots = {}
+        
+        for commit in commits:
+            for file_path in commit['files_changed']:
+                if file_path not in hotspots:
+                    hotspots[file_path] = {
+                        'file': file_path,
+                        'commits_touching': 0,
+                        'lines_changed': 0
+                    }
+                
+                hotspots[file_path]['commits_touching'] += 1
+                # Approximate lines changed per file (total stats / number of files)
+                files_count = len(commit['files_changed'])
+                if files_count > 0:
+                    approx_lines = (commit['stats']['insertions'] + commit['stats']['deletions']) // files_count
+                    hotspots[file_path]['lines_changed'] += approx_lines
+        
+        # Sort by commits touching (descending) and return top 10
+        return sorted(hotspots.values(), key=lambda x: x['commits_touching'], reverse=True)[:10]
+    
+    def _calculate_complexity_trend(self, commits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Calculate monthly complexity trends"""
+        trends = {}
+        
+        for commit in commits:
+            # Group by month (YYYY-MM format)
+            date_obj = datetime.fromisoformat(commit['date'].replace('Z', '+00:00'))
+            period = date_obj.strftime('%Y-%m')
+            
+            if period not in trends:
+                trends[period] = {
+                    'period': period,
+                    'lines_added': 0,
+                    'lines_deleted': 0,
+                    'files_touched': 0
+                }
+            
+            trends[period]['lines_added'] += commit['stats']['insertions']
+            trends[period]['lines_deleted'] += commit['stats']['deletions']
+            trends[period]['files_touched'] += commit['stats']['files']
+        
+        # Sort by period (chronological)
+        return sorted(trends.values(), key=lambda x: x['period'])
+    
+    def _extract_evolution_moments(self, commits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Extract key evolution moments from commits"""
+        evolution = []
+        
+        # Take significant commits (high change count or key words)
+        significant_commits = []
+        
+        for commit in commits:
+            # Consider significant if many files changed or contains key terms
+            total_changes = commit['stats']['insertions'] + commit['stats']['deletions']
+            has_keywords = any(word in commit['message'].lower() 
+                             for word in ['add', 'implement', 'introduce', 'refactor', 'remove'])
+            
+            if total_changes > 20 or has_keywords or commit['stats']['files'] > 3:
+                significant_commits.append(commit)
+        
+        # Limit to top 8 most significant and sort by date
+        significant_commits = sorted(significant_commits, 
+                                   key=lambda x: x['stats']['insertions'] + x['stats']['deletions'], 
+                                   reverse=True)[:8]
+        significant_commits.sort(key=lambda x: x['date'])
+        
+        for commit in significant_commits:
+            evolution.append({
+                'when': commit['date'][:10],  # YYYY-MM-DD format
+                'hash': commit['hash'],
+                'title': self._extract_commit_title(commit['message']),
+                'detail': commit['message'][:100] + "..." if len(commit['message']) > 100 else commit['message'],
+                'files': commit['files_changed'][:5]  # Limit to first 5 files
+            })
+        
+        return evolution
+    
+    def _extract_commit_title(self, message: str) -> str:
+        """Extract a short title from commit message"""
+        lines = message.strip().split('\n')
+        title = lines[0]
+        
+        # Shorten if too long
+        if len(title) > 50:
+            title = title[:47] + "..."
+        
+        return title
+    
     def _cleanup(self):
         """Clean up temporary directory"""
         if self.temp_dir and os.path.exists(self.temp_dir):
