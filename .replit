@@ -5,6 +5,7 @@ entrypoint = "src/App.tsx"
 
 [nix]
 channel = "stable-24_05"
+packages = ["libxcrypt"]
 
 [unitTest]
 language = "nodejs"
@@ -17,3 +18,19 @@ publicDir = "dist"
 [[ports]]
 localPort = 5173
 externalPort = 80
+
+[workflows]
+runButton = "Run Full Stack"
+
+[[workflows.workflow]]
+name = "Run Full Stack"
+author = 1322069
+mode = "parallel"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd backend && python main.py"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run dev"

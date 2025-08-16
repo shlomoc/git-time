@@ -1,0 +1,104 @@
+
+import os
+import logging
+from typing import List, Dict, Any
+import openai
+from openai import AsyncOpenAI
+
+logger = logging.getLogger(__name__)
+
+class GPTSummarizer:
+    """Handles GPT-based commit summarization"""
+    
+    def __init__(self):
+        api_key = os.environ.get('OPENAI_API_KEY')
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY environment variable is required")
+        
+        self.client = AsyncOpenAI(api_key=api_key)
+        self.temperature = 0.3
+        self.max_tokens = 1000
+    
+    async def summarize_commits(self, commits: List[Dict[str, Any]], topic: str) -> str:
+        """Generate GPT summary of commits for a specific topic"""
+        try:
+            # Build prompt from commits
+            prompt = self._build_prompt(commits, topic)
+            
+            logger.info(f"Sending {len(commits)} commits to GPT for summarization")
+            
+            # Call GPT API
+            response = await self.client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": self._get_system_prompt()},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=self.temperature,
+                max_tokens=self.max_tokens
+            )
+            
+            summary = response.choices[0].message.content
+            logger.info("GPT summarization completed")
+            
+            return summary
+            
+        except Exception as e:
+            logger.error(f"GPT summarization failed: {e}")
+            return self._fallback_summary(commits, topic)
+    
+    def _get_system_prompt(self) -> str:
+        """Get the system prompt for GPT"""
+        return """You are a senior software architect and version control expert. Your task is to analyze a list of git commits and explain how a specific feature evolved over time in the codebase.
+
+Your output should be a clear, structured summary of how the feature changed, what decisions were made, and any architectural or business implications.
+
+Focus only on the specified topic. Identify initial implementation, major changes, refactors, and architecture shifts. Infer motivation if possible. Highlight important contributors.
+
+Use a narrative tone like a changelog for humans. Be concise but insightful."""
+    
+    def _build_prompt(self, commits: List[Dict[str, Any]], topic: str) -> str:
+        """Build the prompt for GPT from commits"""
+        prompt = f"Topic: {topic}\n\nCommits:\n"
+        
+        for commit in commits[:15]:  # Limit to avoid token limits
+            prompt += f"- Commit: {commit['hash']}\n"
+            prompt += f"  Author: {commit['author']}\n"
+            prompt += f"  Date: {commit['date'][:10]}\n"
+            prompt += f"  Message: {commit['message'][:200]}\n"
+            prompt += f"  Files: {', '.join(commit['files_changed'][:5])}\n"
+            if commit['diff']:
+                prompt += f"  Diff: {commit['diff'][:300]}...\n"
+            prompt += "\n"
+        
+        prompt += "\nProvide a structured summary of how this feature evolved:"
+        
+        return prompt
+    
+    def _fallback_summary(self, commits: List[Dict[str, Any]], topic: str) -> str:
+        """Provide fallback summary when GPT fails"""
+        summary = f"## Evolution Summary: {topic.title()}\n\n"
+        summary += f"**Analysis Period**: {len(commits)} commits analyzed\n\n"
+        
+        if commits:
+            earliest = min(commits, key=lambda x: x['date'])
+            latest = max(commits, key=lambda x: x['date'])
+            
+            summary += f"**Timeline**: {earliest['date'][:10]} to {latest['date'][:10]}\n\n"
+            
+            # Key contributors
+            authors = {}
+            for commit in commits:
+                authors[commit['author']] = authors.get(commit['author'], 0) + 1
+            
+            top_authors = sorted(authors.items(), key=lambda x: x[1], reverse=True)[:3]
+            summary += f"**Key Contributors**: {', '.join([f'{author} ({count} commits)' for author, count in top_authors])}\n\n"
+            
+            # Major changes
+            summary += "**Major Changes**:\n"
+            for commit in commits[:5]:
+                summary += f"- {commit['date'][:10]}: {commit['message'][:100]}\n"
+        
+        summary += "\n*Note: This is a fallback summary. Full AI analysis was unavailable.*"
+        
+        return summary
