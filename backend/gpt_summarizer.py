@@ -23,19 +23,20 @@ class GPTSummarizer:
         
         self.client = AsyncOpenAI(api_key=api_key)
         self.temperature = 0.3
-        self.max_completion_tokens = 1000
+        self.max_completion_tokens = 800  # Reduced for faster responses
+        self.max_qa_tokens = 600  # Even smaller for Q&A
     
     async def summarize_commits(self, commits: List[Dict[str, Any]], topic: str) -> str:
         """Generate GPT summary of commits for a specific topic"""
         try:
-            # Build prompt from commits
-            prompt = self._build_prompt(commits, topic)
+            # Build optimized prompt from commits
+            prompt = self._build_prompt_optimized(commits, topic)
             
-            logger.info(f"Sending {len(commits)} commits to GPT for summarization")
+            logger.info(f"Sending {len(commits)} commits to GPT for summarization (optimized)")
             
-            # Call GPT API
+            # Call GPT API with optimized settings
             response = await self.client.chat.completions.create(
-                model="gpt-5",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": self._get_system_prompt()},
                     {"role": "user", "content": prompt}
@@ -44,13 +45,101 @@ class GPTSummarizer:
             )
             
             summary = response.choices[0].message.content
-            logger.info("GPT summarization completed")
+            logger.info(f"GPT summarization completed. Summary length: {len(summary) if summary else 0}")
+            
+            if not summary or len(summary.strip()) == 0:
+                logger.warning("GPT returned empty summary, using fallback")
+                return self._fallback_summary(commits, topic)
             
             return summary
             
         except Exception as e:
             logger.error(f"GPT summarization failed: {e}")
             return self._fallback_summary(commits, topic)
+    
+    async def summarize_and_qa_batch(self, commits: List[Dict[str, Any]], topic: str, question: str = None) -> Dict[str, Any]:
+        """Batch processing for summary and Q&A in a single call"""
+        try:
+            # Use default question if none provided
+            if not question:
+                question = f"How did {topic} evolve in this codebase?"
+            
+            # Build combined prompt
+            summary_prompt = self._build_prompt_optimized(commits, topic)
+            qa_prompt = self._build_qa_prompt_optimized(question, topic, commits)
+            
+            combined_prompt = f"""Please provide both a summary and answer the question below.
+            
+SUMMARY REQUEST:
+{summary_prompt}
+
+QUESTION TO ANSWER:
+{qa_prompt}
+
+Format your response as:
+SUMMARY:
+[Your summary here]
+
+ANSWER:
+[Your Q&A response here]"""
+            
+            logger.info(f"Batch processing summary + Q&A for {len(commits)} commits")
+            
+            response = await self.client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": self._get_combined_system_prompt()},
+                    {"role": "user", "content": combined_prompt}
+                ],
+                max_completion_tokens=self.max_completion_tokens + 200  # Slightly more for combined
+            )
+            
+            content = response.choices[0].message.content
+            return self._parse_combined_response(content, commits)
+            
+        except Exception as e:
+            logger.error(f"Batch GPT processing failed: {e}")
+            # Fallback to individual calls
+            summary = self._fallback_summary(commits, topic)
+            qa_data = self._fallback_qa_response(question or f"How did {topic} evolve?", commits, {})
+            return {"summary": summary, "qa_data": qa_data}
+    
+    def _get_combined_system_prompt(self) -> str:
+        """System prompt for combined summary + Q&A processing"""
+        return """You are a senior software architect and version control expert. 
+
+For the SUMMARY: Analyze the git commits and explain how the specified feature evolved over time. Focus on initial implementation, major changes, refactors, and architecture shifts. Be concise but insightful.
+
+For the ANSWER: Provide evidence-based answers with specific commit citations. Format as:
+Answer: <2-4 sentences>
+Key Evidence:
+<hash> — "<commit message or quoted fragment>"
+
+Be direct and avoid speculation unless clearly marked as hypothesis."""
+    
+    def _parse_combined_response(self, content: str, commits: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Parse combined summary + Q&A response"""
+        try:
+            parts = content.split("ANSWER:")
+            summary_part = parts[0].replace("SUMMARY:", "").strip()
+            
+            if len(parts) > 1:
+                qa_part = parts[1].strip()
+                qa_data = self._parse_qa_response(qa_part, commits)
+            else:
+                # Fallback if format is not as expected
+                qa_data = {"answer": "Combined processing format error", "evidence": []}
+            
+            return {
+                "summary": summary_part,
+                "qa_data": qa_data
+            }
+        except Exception as e:
+            logger.error(f"Error parsing combined response: {e}")
+            return {
+                "summary": content[:500] + "..." if len(content) > 500 else content,
+                "qa_data": {"answer": "Parsing error occurred", "evidence": []}
+            }
     
     def _get_system_prompt(self) -> str:
         """Get the system prompt for GPT"""
@@ -62,23 +151,33 @@ Focus only on the specified topic. Identify initial implementation, major change
 
 Use a narrative tone like a changelog for humans. Be concise but insightful."""
     
-    def _build_prompt(self, commits: List[Dict[str, Any]], topic: str) -> str:
-        """Build the prompt for GPT from commits"""
-        prompt = f"Topic: {topic}\n\nCommits:\n"
+    def _build_prompt_optimized(self, commits: List[Dict[str, Any]], topic: str) -> str:
+        """Build optimized prompt with reduced token usage"""
+        prompt = f"Topic: {topic}\n\nCommits ({len(commits)} total):\n"
         
-        for commit in commits[:15]:  # Limit to avoid token limits
-            prompt += f"- Commit: {commit['hash']}\n"
-            prompt += f"  Author: {commit['author']}\n"
-            prompt += f"  Date: {commit['date'][:10]}\n"
-            prompt += f"  Message: {commit['message'][:200]}\n"
-            prompt += f"  Files: {', '.join(commit['files_changed'][:5])}\n"
-            if commit['diff']:
-                prompt += f"  Diff: {commit['diff'][:300]}...\n"
+        # Limit to 10 commits and reduce content per commit
+        for commit in commits[:10]:
+            prompt += f"- {commit['hash']}: {commit['message'][:150]}\n"
+            prompt += f"  {commit['author']} | {commit['date'][:10]}\n"
+            
+            # Show only most relevant files
+            files_to_show = commit.get('files_changed', [])[:3]
+            if files_to_show:
+                prompt += f"  Files: {', '.join(files_to_show)}\n"
+            
+            # Shorter diff excerpts
+            if commit.get('diff') and len(commit['diff'].strip()) > 10:
+                diff_excerpt = commit['diff'][:150].strip()
+                if diff_excerpt:
+                    prompt += f"  Changes: {diff_excerpt}...\n"
             prompt += "\n"
         
         prompt += "\nProvide a structured summary of how this feature evolved:"
-        
         return prompt
+    
+    def _build_prompt(self, commits: List[Dict[str, Any]], topic: str) -> str:
+        """Legacy method - calls optimized version"""
+        return self._build_prompt_optimized(commits, topic)
     
     def _fallback_summary(self, commits: List[Dict[str, Any]], topic: str) -> str:
         """Provide fallback summary when GPT fails"""
@@ -118,15 +217,20 @@ Use a narrative tone like a changelog for humans. Be concise but insightful."""
             
             # Call GPT API with Q&A system prompt
             response = await self.client.chat.completions.create(
-                model="gpt-5",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": self._get_qa_system_prompt()},
                     {"role": "user", "content": qa_prompt}
                 ],
-                max_completion_tokens=800
+                max_completion_tokens=self.max_qa_tokens
             )
             
             content = response.choices[0].message.content
+            logger.info(f"GPT Q&A completed. Response length: {len(content) if content else 0}")
+            
+            if not content or len(content.strip()) == 0:
+                logger.warning("GPT returned empty Q&A response, using fallback")
+                return self._fallback_qa_response(question, commits, visualizations)
             
             # Parse response into answer and evidence
             parsed_qa = self._parse_qa_response(content, commits)
@@ -161,26 +265,31 @@ Key Evidence
 
 Do not invent commit hashes or authors; only use what's provided."""
     
-    def _build_qa_prompt(self, question: str, topic: str, commits: List[Dict[str, Any]]) -> str:
-        """Build Q&A prompt following qa-feature-ui.md format"""
+    def _build_qa_prompt_optimized(self, question: str, topic: str, commits: List[Dict[str, Any]]) -> str:
+        """Build optimized Q&A prompt with reduced token usage"""
         prompt = f"Question: {question}\n"
         
         if topic:
             prompt += f"Topic: {topic}\n"
         
-        prompt += "\nCommits:\n"
+        prompt += "\nKey Commits:\n"
         
-        for commit in commits[:15]:  # Limit for token management
-            prompt += f"- {{\n"
-            prompt += f"  hash: \"{commit['hash']}\",\n"
-            prompt += f"  author: \"{commit['author']}\",\n"
-            prompt += f"  date: \"{commit['date'][:10]}\",\n"
-            prompt += f"  message: \"{commit['message'][:150]}\",\n"
-            prompt += f"  files_changed: {commit['files_changed'][:3]},\n"
-            prompt += f"  diff_excerpt: \"{commit['diff'][:200]}...\"\n"
-            prompt += "}\n"
+        # Limit to 8 commits and use compact format
+        for commit in commits[:8]:
+            prompt += f"{commit['hash']}: {commit['message'][:100]}\n"
+            prompt += f"  By {commit['author']} on {commit['date'][:10]}\n"
+            
+            # Only include diff if it's meaningful
+            diff = commit.get('diff', '').strip()
+            if diff and len(diff) > 20:
+                prompt += f"  Key changes: {diff[:120]}...\n"
+            prompt += "\n"
         
         return prompt
+    
+    def _build_qa_prompt(self, question: str, topic: str, commits: List[Dict[str, Any]]) -> str:
+        """Legacy method - calls optimized version"""
+        return self._build_qa_prompt_optimized(question, topic, commits)
     
     def _parse_qa_response(self, content: str, commits: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Parse GPT Q&A response into structured format"""

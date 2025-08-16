@@ -1,0 +1,37 @@
+It takes 20 seconds to analyze repo. Choose 2 or 3 ways to speed up that are simple to implement.
+Consider ways to improve performance like:
+
+1) Shallow, sparse, and scoped
+
+Shallow clone: git clone --depth 30 <repo>
+Sparse checkout (git ≥2.25):
+
+git sparse-checkout init --cone
+git sparse-checkout set src auth lib fastapi_users flask_login
+
+
+Since a reasonable date (you still get a good story):
+Last 24–36 months is plenty for “evolution”.
+
+2) Topic-first commit filtering
+
+Only traverse commits that touch relevant files/keywords. In PyDriller:
+
+from datetime import datetime, timedelta
+from pydriller import Repository
+
+def iter_topic_commits(repo_path, paths=None, keywords=None, months=30):
+    since = datetime.now() - timedelta(days=30*months)
+    for c in Repository(repo_path, since=since, only_in_branch='master').traverse_commits():
+        if paths and not any(m.new_path and m.new_path.startswith(tuple(paths)) for m in c.modifications):
+            continue
+        msg = (c.msg or '').lower()
+        if keywords and not any(k in msg for k in keywords):
+            continue
+        yield c
+
+3) Hard cap work
+
+Max commits processed: 300 per request
+Max diff bytes per commit: 50KB (truncate with “[…]” marker)
+Batch LLM calls in chunks of 10–20 commits

@@ -1,5 +1,6 @@
 
 import React from 'react';
+import ReactMarkdown from 'react-markdown';
 
 interface SummaryProps {
   summary: string;
@@ -16,8 +17,8 @@ export default function Summary({ summary, commitCount }: SummaryProps) {
         </div>
       </div>
       
-      <div className="summary-content">
-        <pre className="summary-text">{summary}</pre>
+      <div className="summary-content summary-markdown">
+        <ReactMarkdown>{summary}</ReactMarkdown>
       </div>
     </div>
   );

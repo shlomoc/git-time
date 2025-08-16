@@ -184,7 +184,7 @@ export default function App() {
       </main>
 
       <footer className="app-footer">
-        <p>Built for hackathon demo • Powered by GPT-5 & GitPython</p>
+        <p>Built for hackathon demo • Powered by GPT-4o & GitPython</p>
       </footer>
     </div>
   );

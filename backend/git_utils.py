@@ -3,7 +3,7 @@ import os
 import tempfile
 import shutil
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Any
 import asyncio
 import subprocess
@@ -20,6 +20,20 @@ class GitAnalyzer:
         'database': ['db', 'database', 'migration', 'schema', 'model', 'sql'],
         'ui': ['component', 'view', 'template', 'style', 'css', 'html']
     }
+    
+    TOPIC_PATHS = {
+        'auth': ['auth', 'security', 'login', 'user', 'session', 'jwt', 'oauth'],
+        'api': ['api', 'endpoint', 'route', 'controller', 'handler', 'fastapi', 'flask'],
+        'database': ['db', 'database', 'migration', 'schema', 'model', 'sql', 'orm'],
+        'ui': ['component', 'view', 'template', 'style', 'css', 'html', 'react', 'vue']
+    }
+    
+    # Performance constants
+    MAX_COMMITS = 100
+    MAX_DIFF_SIZE = 200
+    DEFAULT_MONTHS_BACK = 30
+    FALLBACK_MONTHS_BACK = 48
+    MIN_COMMITS_THRESHOLD = 5
     
     def __init__(self):
         self.temp_dir = None
@@ -72,47 +86,85 @@ class GitAnalyzer:
             shutil.rmtree(temp_dir, ignore_errors=True)
             raise e
     
-    def _filter_commits_by_topic(self, commits, topic: str) -> List:
-        """Filter commits based on topic keywords and file changes"""
+    def _filter_commits_by_topic_optimized(self, commits, topic: str) -> List:
+        """Optimized filtering with early exit and path-based filtering"""
         keywords = self.TOPIC_KEYWORDS.get(topic.lower(), [topic.lower()])
+        topic_paths = self.TOPIC_PATHS.get(topic.lower(), [topic.lower()])
         filtered_commits = []
         
         for commit in commits:
-            # Check commit message
+            # Early exit if we have enough commits
+            if len(filtered_commits) >= self.MAX_COMMITS:
+                break
+                
+            # Check commit message first (fastest check)
             message_match = any(keyword in commit.message.lower() for keyword in keywords)
             
-            # Check changed files
+            # Check changed files with path-based filtering
+            file_match = False
+            path_match = False
             try:
                 files_changed = list(commit.stats.files.keys())
+                
+                # Limit file analysis to avoid performance hits
+                files_to_check = files_changed[:10]  # Check only first 10 files
+                
+                # Check for keyword matches in filenames
                 file_match = any(
                     any(keyword in file_path.lower() for keyword in keywords)
-                    for file_path in files_changed
+                    for file_path in files_to_check
                 )
-            except:
+                
+                # Check for path-based matches (more specific)
+                path_match = any(
+                    any(path in file_path.lower() for path in topic_paths)
+                    for file_path in files_to_check
+                )
+                
+            except Exception as e:
+                logger.debug(f"Error checking files for commit {commit.hexsha[:8]}: {e}")
                 file_match = False
+                path_match = False
             
-            if message_match or file_match:
+            # Include commit if any match is found
+            if message_match or file_match or path_match:
                 filtered_commits.append(commit)
         
-        logger.info(f"Filtered to {len(filtered_commits)} topic-related commits")
+        logger.info(f"Filtered to {len(filtered_commits)} topic-related commits (optimized)")
         return filtered_commits
     
-    def _structure_commits(self, commits) -> List[Dict[str, Any]]:
-        """Convert git commits to structured data"""
+    def _filter_commits_by_topic(self, commits, topic: str) -> List:
+        """Legacy method - calls optimized version"""
+        return self._filter_commits_by_topic_optimized(commits, topic)
+    
+    def _structure_commits_optimized(self, commits) -> List[Dict[str, Any]]:
+        """Convert git commits to structured data with performance optimizations"""
         structured = []
         
         for commit in commits:
             try:
-                # Get file changes
+                # Get file changes with limit
                 files_changed = list(commit.stats.files.keys())
+                files_changed_limited = files_changed[:3]  # Limit to 3 most relevant files
                 
-                # Get diff (simplified)
+                # Get diff with smaller limit for performance
                 diff_text = ""
                 try:
                     if commit.parents:
                         diff = commit.parents[0].diff(commit)
-                        diff_text = str(diff)[:500]  # Limit diff size
-                except:
+                        diff_str = str(diff)
+                        # Smart truncation - try to keep complete lines
+                        if len(diff_str) > self.MAX_DIFF_SIZE:
+                            truncated = diff_str[:self.MAX_DIFF_SIZE]
+                            # Find last complete line
+                            last_newline = truncated.rfind('\n')
+                            if last_newline > self.MAX_DIFF_SIZE // 2:
+                                diff_text = truncated[:last_newline] + "\n[...]"
+                            else:
+                                diff_text = truncated + "[...]"
+                        else:
+                            diff_text = diff_str
+                except Exception as e:
                     diff_text = "Initial commit or diff unavailable"
                 
                 structured.append({
@@ -121,7 +173,8 @@ class GitAnalyzer:
                     'email': commit.author.email,
                     'date': commit.committed_datetime.isoformat(),
                     'message': commit.message.strip(),
-                    'files_changed': files_changed,
+                    'files_changed': files_changed_limited,  # Limited for performance
+                    'files_changed_count': len(files_changed),  # Keep total count
                     'diff': diff_text,
                     'stats': {
                         'insertions': commit.stats.total['insertions'],
@@ -131,10 +184,14 @@ class GitAnalyzer:
                 })
                 
             except Exception as e:
-                logger.warning(f"Error processing commit {commit.hexsha}: {e}")
+                logger.warning(f"Error processing commit {commit.hexsha[:8]}: {e}")
                 continue
         
         return structured
+    
+    def _structure_commits(self, commits) -> List[Dict[str, Any]]:
+        """Legacy method - calls optimized version"""
+        return self._structure_commits_optimized(commits)
     
     def create_timeline(self, commits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Create timeline data for visualization"""
