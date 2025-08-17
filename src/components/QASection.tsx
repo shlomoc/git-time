@@ -20,7 +20,8 @@ export default function QASection({ initialQA, repoUrl, topic, onNewQuestion }: 
     setLoading(true);
     
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5002';
+      const baseApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5002';
+      const apiUrl = baseApiUrl.startsWith('http') ? baseApiUrl : `https://${baseApiUrl}`;
       const response = await fetch(`${apiUrl}/qa`, {
         method: 'POST',
         headers: {

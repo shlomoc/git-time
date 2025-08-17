@@ -41,7 +41,9 @@ export default function App() {
     }));
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5002';
+      const baseApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5002';
+      // Ensure the API URL has proper protocol
+      const apiUrl = baseApiUrl.startsWith('http') ? baseApiUrl : `https://${baseApiUrl}`;
       console.log('API URL:', apiUrl); // Debug log
       console.log('Analyzing repo:', repoUrl, 'topic:', topic); // Debug log
       
