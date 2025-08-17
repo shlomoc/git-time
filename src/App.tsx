@@ -56,12 +56,29 @@ export default function App() {
         })
       });
 
+      console.log('Response status:', response.status); // Debug log
+      console.log('Response headers:', response.headers); // Debug log
+      
       if (!response.ok) {
-        const errorData = await response.json();
+        const responseText = await response.text();
+        console.log('Error response text:', responseText); // Debug log
+        let errorData;
+        try {
+          errorData = JSON.parse(responseText);
+        } catch {
+          throw new Error(`HTTP ${response.status}: ${responseText || 'Analysis failed'}`);
+        }
         throw new Error(errorData.detail || 'Analysis failed');
       }
 
-      const result = await response.json();
+      const responseText = await response.text();
+      console.log('Success response text:', responseText); // Debug log
+      
+      if (!responseText) {
+        throw new Error('Empty response from server');
+      }
+      
+      const result = JSON.parse(responseText);
       setState(prev => ({ ...prev, loading: false, error: null, result }));
 
     } catch (error) {

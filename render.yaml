@@ -22,4 +22,7 @@ services:
     pullRequestPreviewsEnabled: false
     envVars:
       - key: VITE_API_URL
-        value: https://gittime-backend.onrender.com
+        fromService:
+          type: web
+          name: gittime-backend
+          property: host
