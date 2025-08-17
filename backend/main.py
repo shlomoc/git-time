@@ -24,30 +24,22 @@ app = FastAPI(title="Codebase Time Machine API")
 
 # CORS middleware for React frontend
 # Allow both development and production origins
-# CORS configuration - temporarily permissive for debugging
-is_production = os.environ.get("RENDER")  # Render sets this automatically
-if is_production:
-    # In production, allow Render domains temporarily for debugging
-    allowed_origins = [
-        "https://*.onrender.com",
-        "http://localhost:5173",  # Keep for local testing
-        "http://localhost:3000",
-    ]
-else:
-    # Local development
-    allowed_origins = [
-        "http://localhost:5173",
-        "http://localhost:3000",
-    ]
+# CORS configuration - simplified for Render deployment
+allowed_origins = [
+    "http://localhost:5173",  # Local dev
+    "http://localhost:3000",  # Alternative local dev
+    "https://git-time-frontend.onrender.com",  # Production frontend
+]
 
-# Add any additional frontend URL from environment
-production_frontend_url = os.environ.get("FRONTEND_URL")
-if production_frontend_url:
-    allowed_origins.append(production_frontend_url)
+# Add environment-based origins
+if os.environ.get("FRONTEND_URL"):
+    allowed_origins.append(os.environ.get("FRONTEND_URL"))
 
+# Temporarily allow all origins in production for debugging
+is_production = os.environ.get("RENDER")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if is_production else allowed_origins,  # Temporarily allow all in production for debugging
+    allow_origins=["*"] if is_production else allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
