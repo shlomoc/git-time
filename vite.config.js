@@ -9,7 +9,13 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      external: ['#minpath', '#minproc', '#minurl']
+      onwarn(warning, warn) {
+        // Ignore warnings about unresolved imports starting with #
+        if (warning.code === 'UNRESOLVED_IMPORT' && warning.source?.startsWith('#')) {
+          return;
+        }
+        warn(warning);
+      }
     }
   }
 })
