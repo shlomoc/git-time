@@ -23,11 +23,23 @@ CACHE_EXPIRY_SECONDS = 1800  # 30 minutes
 app = FastAPI(title="Codebase Time Machine API")
 
 # CORS middleware for React frontend
+# Allow both development and production origins
+allowed_origins = [
+    "http://localhost:5173",  # Vite dev server
+    "http://localhost:3000",  # Alternative dev server
+    "https://gittime-frontend.onrender.com",  # Production frontend
+]
+
+# In production, allow origin from environment variable
+production_frontend_url = os.environ.get("FRONTEND_URL")
+if production_frontend_url:
+    allowed_origins.append(production_frontend_url)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 

@@ -5,6 +5,42 @@ All notable changes to the Codebase Time Machine project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2024-08-17
+
+### 🚀 Production Deployment Support
+
+#### Render.com Integration
+- **Blueprint Configuration**: Added `render.yaml` for Infrastructure-as-Code deployment with both backend web service and frontend static site
+- **Production CORS**: Updated backend CORS configuration with specific production domains and environment variable support
+- **Environment Variables**: Configured dynamic API URL handling with `VITE_API_URL` for frontend and `OPENAI_API_KEY` for backend
+- **Build Optimization**: Fixed Vite build issues with external dependencies (`#minpath`, `#minproc`, `#minurl`)
+
+#### Deployment Architecture
+- **Backend Web Service**: FastAPI with uvicorn on Render (Python runtime)
+- **Frontend Static Site**: React with Vite build on Render
+- **Environment Management**: Production-ready environment variable configuration
+- **Documentation**: Complete deployment guide in `docs/RENDER_DEPLOYMENT.md`
+
+#### Technical Improvements
+- **CORS Security**: Replaced wildcard origins with specific allowed domains for production security
+- **Dynamic Configuration**: Frontend now uses environment-based backend URL for flexible deployment
+- **Build Process**: Validated both frontend and backend build commands for deployment readiness
+- **Error Handling**: Enhanced production error handling and logging
+
+### 🔧 Configuration Files Added
+- **`render.yaml`**: Complete Blueprint configuration for automated deployment
+- **`docs/RENDER_DEPLOYMENT.md`**: Comprehensive deployment guide with troubleshooting
+- **Updated `vite.config.js`**: Fixed external dependency issues for production builds
+- **Enhanced `main.py`**: Production-ready CORS and environment configuration
+
+### 📋 Deployment Features
+- **Free Tier Compatible**: Optimized for Render.com free tier with smart caching
+- **Auto-deployment**: Git push triggers automatic Blueprint deployment
+- **Health Monitoring**: Backend health check endpoint for service monitoring
+- **Security**: Environment variables for sensitive data (API keys)
+
+---
+
 ## [2.2.0] - 2024-08-16
 
 ### ⚡ Performance & UX Optimization Release
