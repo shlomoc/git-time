@@ -23,8 +23,8 @@ class GPTSummarizer:
         
         self.client = AsyncOpenAI(api_key=api_key)
         self.temperature = 0.3
-        self.max_completion_tokens = 800  # Reduced for faster responses
-        self.max_qa_tokens = 600  # Even smaller for Q&A
+        self.max_completion_tokens = 300  # Much smaller for brief summaries
+        self.max_qa_tokens = 250  # Smaller for concise Q&A
     
     async def summarize_commits(self, commits: List[Dict[str, Any]], topic: str) -> str:
         """Generate GPT summary of commits for a specific topic"""
@@ -91,7 +91,7 @@ ANSWER:
                     {"role": "system", "content": self._get_combined_system_prompt()},
                     {"role": "user", "content": combined_prompt}
                 ],
-                max_completion_tokens=self.max_completion_tokens + 200  # Slightly more for combined
+                max_completion_tokens=self.max_completion_tokens + 100  # Slightly more for combined
             )
             
             content = response.choices[0].message.content
@@ -106,16 +106,20 @@ ANSWER:
     
     def _get_combined_system_prompt(self) -> str:
         """System prompt for combined summary + Q&A processing"""
-        return """You are a senior software architect and version control expert. 
+        return """You are a software architect. Keep responses EXTREMELY SHORT.
 
-For the SUMMARY: Analyze the git commits and explain how the specified feature evolved over time. Focus on initial implementation, major changes, refactors, and architecture shifts. Be concise but insightful.
+For the SUMMARY: EXACTLY 3-4 bullet points (one sentence each):
+• Initial: What was built first
+• Changes: Key updates made
+• Current: How it works now  
+• Impact: Main benefit
 
-For the ANSWER: Provide evidence-based answers with specific commit citations. Format as:
-Answer: <2-4 sentences>
+For the ANSWER: ONE sentence with evidence:
+Answer: <one sentence only>
 Key Evidence:
-<hash> — "<commit message or quoted fragment>"
+<hash> — "<commit message>"
 
-Be direct and avoid speculation unless clearly marked as hypothesis."""
+Be ultra-brief."""
     
     def _parse_combined_response(self, content: str, commits: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Parse combined summary + Q&A response"""
@@ -143,13 +147,15 @@ Be direct and avoid speculation unless clearly marked as hypothesis."""
     
     def _get_system_prompt(self) -> str:
         """Get the system prompt for GPT"""
-        return """You are a senior software architect and version control expert. Your task is to analyze a list of git commits and explain how a specific feature evolved over time in the codebase.
+        return """You are a software architect. Provide an EXTREMELY BRIEF summary.
 
-Your output should be a clear, structured summary of how the feature changed, what decisions were made, and any architectural or business implications.
+Use EXACTLY 3-4 short bullet points:
+• Initial: What was built first
+• Changes: Key updates made  
+• Current: How it works now
+• Impact: Main benefit
 
-Focus only on the specified topic. Identify initial implementation, major changes, refactors, and architecture shifts. Infer motivation if possible. Highlight important contributors.
-
-Use a narrative tone like a changelog for humans. Be concise but insightful."""
+Each bullet point should be ONE sentence only. No explanations or details."""
     
     def _build_prompt_optimized(self, commits: List[Dict[str, Any]], topic: str) -> str:
         """Build optimized prompt with reduced token usage"""
