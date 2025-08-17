@@ -27,7 +27,7 @@ app = FastAPI(title="Codebase Time Machine API")
 allowed_origins = [
     "http://localhost:5173",  # Vite dev server
     "http://localhost:3000",  # Alternative dev server
-    "https://gittime-frontend.onrender.com",  # Production frontend
+    "https://gittime-frontend.onrender.com",  # Production frontend (you'll need to update this with actual URL)
 ]
 
 # In production, allow origin from environment variable

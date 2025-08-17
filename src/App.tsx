@@ -42,6 +42,9 @@ export default function App() {
 
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5002';
+      console.log('API URL:', apiUrl); // Debug log
+      console.log('Analyzing repo:', repoUrl, 'topic:', topic); // Debug log
+      
       const response = await fetch(`${apiUrl}/analyze`, {
         method: 'POST',
         headers: {
@@ -62,6 +65,7 @@ export default function App() {
       setState(prev => ({ ...prev, loading: false, error: null, result }));
 
     } catch (error) {
+      console.error('Analysis error:', error); // Debug log
       setState(prev => ({
         ...prev,
         loading: false,
